@@ -629,13 +629,401 @@ def generate_summary_dashboard(df):
     print("Generated: 00_executive_dashboard.png")
 
 
+def load_old_data():
+    """Load and prepare 2023 data for comparison"""
+    df = pd.read_csv('18_06_2023.csv')
+
+    # Extract numeric area
+    def extract_area(a):
+        if pd.isna(a):
+            return None
+        nums = re.findall(r'[\d.]+', str(a))
+        if nums:
+            try:
+                return float(nums[0])
+            except:
+                return None
+        return None
+
+    df['area_numeric'] = df['area'].apply(extract_area)
+    df['view_count'] = df['baxis_sayi']
+    df['floor'] = df['flat']
+
+    return df
+
+
+def compare_1_market_size(df_new, df_old):
+    """Chart: Market Size Comparison 2023 vs 2025"""
+    fig, ax = plt.subplots(figsize=(12, 7))
+
+    years = ['2023', '2025']
+    listings = [len(df_old), len(df_new)]
+
+    colors = [COLORS['secondary'], COLORS['primary']]
+    bars = ax.bar(years, listings, color=colors, edgecolor='white', linewidth=2, width=0.5)
+
+    # Add value labels
+    for bar, val in zip(bars, listings):
+        ax.text(bar.get_x() + bar.get_width()/2, val + 200,
+                f'{val:,}', ha='center', fontweight='bold', fontsize=16)
+
+    # Calculate change
+    change = ((len(df_new) - len(df_old)) / len(df_old)) * 100
+
+    ax.set_ylabel('Number of Active Listings', fontweight='bold')
+    ax.set_title(f'Market Size Evolution: 2023 vs 2025\nChange: {change:+.1f}%',
+                 fontsize=16, fontweight='bold', pad=20)
+
+    # Add arrow indicating direction
+    ax.annotate('', xy=(1, len(df_new)), xytext=(0, len(df_old)),
+                arrowprops=dict(arrowstyle='->', color=COLORS['accent'], lw=3))
+
+    plt.tight_layout()
+    plt.savefig(f'{OUTPUT_DIR}/13_yoy_market_size.png', dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print("Generated: 13_yoy_market_size.png")
+
+
+def compare_2_room_distribution(df_new, df_old):
+    """Chart: Room Distribution Comparison"""
+    fig, ax = plt.subplots(figsize=(14, 7))
+
+    # Prepare data
+    df_new_valid = df_new[df_new['room_count'].notna() & (df_new['room_count'] >= 1) & (df_new['room_count'] <= 6)]
+    df_old_valid = df_old[df_old['room_count'].notna() & (df_old['room_count'] >= 1) & (df_old['room_count'] <= 6)]
+
+    new_rooms = df_new_valid['room_count'].value_counts().sort_index()
+    old_rooms = df_old_valid['room_count'].value_counts().sort_index()
+
+    # Normalize to percentages
+    new_pct = (new_rooms / new_rooms.sum() * 100)
+    old_pct = (old_rooms / old_rooms.sum() * 100)
+
+    x = np.arange(len(new_pct))
+    width = 0.35
+
+    bars1 = ax.bar(x - width/2, old_pct.values, width, label='2023', color=COLORS['secondary'], edgecolor='white')
+    bars2 = ax.bar(x + width/2, new_pct.values, width, label='2025', color=COLORS['primary'], edgecolor='white')
+
+    ax.set_xlabel('Number of Rooms', fontweight='bold')
+    ax.set_ylabel('Percentage of Market (%)', fontweight='bold')
+    ax.set_title('Property Size Distribution: 2023 vs 2025\nShift in Market Composition',
+                 fontsize=16, fontweight='bold', pad=20)
+    ax.set_xticks(x)
+    ax.set_xticklabels([f'{int(r)} Room{"s" if r > 1 else ""}' for r in new_pct.index])
+    ax.legend(fontsize=12)
+
+    # Add percentage labels
+    for bar, val in zip(bars1, old_pct.values):
+        ax.text(bar.get_x() + bar.get_width()/2, val + 0.5, f'{val:.1f}%',
+                ha='center', fontsize=9, color=COLORS['secondary'])
+    for bar, val in zip(bars2, new_pct.values):
+        ax.text(bar.get_x() + bar.get_width()/2, val + 0.5, f'{val:.1f}%',
+                ha='center', fontsize=9, color=COLORS['primary'])
+
+    plt.tight_layout()
+    plt.savefig(f'{OUTPUT_DIR}/14_yoy_room_distribution.png', dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print("Generated: 14_yoy_room_distribution.png")
+
+
+def compare_3_document_types(df_new, df_old):
+    """Chart: Document Type Comparison"""
+    fig, ax = plt.subplots(figsize=(14, 7))
+
+    # Get document distributions
+    new_docs = df_new['document_type'].value_counts()
+    old_docs = df_old['document_type'].value_counts()
+
+    # Normalize to percentages
+    new_pct = (new_docs / new_docs.sum() * 100)
+    old_pct = (old_docs / old_docs.sum() * 100)
+
+    # Get common document types
+    common_docs = ['Çıxarış (Kupça)', 'Müqavilə', 'Bələdiyyə sənədi', 'Yoxdur', 'Sərəncam']
+
+    new_vals = [new_pct.get(d, 0) for d in common_docs]
+    old_vals = [old_pct.get(d, 0) for d in common_docs]
+
+    doc_labels = ['Full Title\n(Kupcha)', 'Contract\nOnly', 'Municipal\nDoc', 'No\nDocument', 'Decree']
+
+    x = np.arange(len(common_docs))
+    width = 0.35
+
+    bars1 = ax.bar(x - width/2, old_vals, width, label='2023', color=COLORS['secondary'], edgecolor='white')
+    bars2 = ax.bar(x + width/2, new_vals, width, label='2025', color=COLORS['primary'], edgecolor='white')
+
+    ax.set_xlabel('Document Type', fontweight='bold')
+    ax.set_ylabel('Percentage of Market (%)', fontweight='bold')
+    ax.set_title('Legal Documentation Trends: 2023 vs 2025\nMarket Formalization Progress',
+                 fontsize=16, fontweight='bold', pad=20)
+    ax.set_xticks(x)
+    ax.set_xticklabels(doc_labels)
+    ax.legend(fontsize=12)
+
+    plt.tight_layout()
+    plt.savefig(f'{OUTPUT_DIR}/15_yoy_document_types.png', dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print("Generated: 15_yoy_document_types.png")
+
+
+def compare_4_repair_types(df_new, df_old):
+    """Chart: Property Condition Comparison"""
+    fig, ax = plt.subplots(figsize=(14, 7))
+
+    # Get repair distributions
+    new_repair = df_new['repair_type'].value_counts()
+    old_repair = df_old['repair_type'].value_counts()
+
+    # Normalize to percentages
+    new_pct = (new_repair / new_repair.sum() * 100)
+    old_pct = (old_repair / old_repair.sum() * 100)
+
+    # Common repair types in order
+    repair_order = ['Əla', 'Yaxşı', 'Orta', 'Təmirsiz', 'Zəif', 'Natamam']
+    repair_labels = ['Excellent', 'Good', 'Average', 'No Repairs', 'Poor', 'Unfinished']
+
+    new_vals = [new_pct.get(r, 0) for r in repair_order]
+    old_vals = [old_pct.get(r, 0) for r in repair_order]
+
+    x = np.arange(len(repair_order))
+    width = 0.35
+
+    bars1 = ax.bar(x - width/2, old_vals, width, label='2023', color=COLORS['secondary'], edgecolor='white')
+    bars2 = ax.bar(x + width/2, new_vals, width, label='2025', color=COLORS['primary'], edgecolor='white')
+
+    ax.set_xlabel('Property Condition', fontweight='bold')
+    ax.set_ylabel('Percentage of Market (%)', fontweight='bold')
+    ax.set_title('Property Condition Trends: 2023 vs 2025\nMarket Quality Evolution',
+                 fontsize=16, fontweight='bold', pad=20)
+    ax.set_xticks(x)
+    ax.set_xticklabels(repair_labels)
+    ax.legend(fontsize=12)
+
+    plt.tight_layout()
+    plt.savefig(f'{OUTPUT_DIR}/16_yoy_repair_types.png', dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print("Generated: 16_yoy_repair_types.png")
+
+
+def compare_5_area_distribution(df_new, df_old):
+    """Chart: Area Distribution Comparison"""
+    fig, ax = plt.subplots(figsize=(14, 7))
+
+    # Filter valid areas
+    new_area = df_new[df_new['area_numeric'].notna() & (df_new['area_numeric'] > 0) & (df_new['area_numeric'] < 500)]['area_numeric']
+    old_area = df_old[df_old['area_numeric'].notna() & (df_old['area_numeric'] > 0) & (df_old['area_numeric'] < 500)]['area_numeric']
+
+    # Create bins
+    bins = [0, 40, 60, 80, 100, 120, 150, 200, 500]
+    labels = ['<40', '40-60', '60-80', '80-100', '100-120', '120-150', '150-200', '200+']
+
+    new_binned = pd.cut(new_area, bins=bins, labels=labels).value_counts().reindex(labels)
+    old_binned = pd.cut(old_area, bins=bins, labels=labels).value_counts().reindex(labels)
+
+    # Normalize to percentages
+    new_pct = (new_binned / new_binned.sum() * 100)
+    old_pct = (old_binned / old_binned.sum() * 100)
+
+    x = np.arange(len(labels))
+    width = 0.35
+
+    bars1 = ax.bar(x - width/2, old_pct.values, width, label='2023', color=COLORS['secondary'], edgecolor='white')
+    bars2 = ax.bar(x + width/2, new_pct.values, width, label='2025', color=COLORS['primary'], edgecolor='white')
+
+    ax.set_xlabel('Property Area (m²)', fontweight='bold')
+    ax.set_ylabel('Percentage of Market (%)', fontweight='bold')
+    ax.set_title('Property Size Trends: 2023 vs 2025\nArea Distribution Shift',
+                 fontsize=16, fontweight='bold', pad=20)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.legend(fontsize=12)
+
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.savefig(f'{OUTPUT_DIR}/17_yoy_area_distribution.png', dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print("Generated: 17_yoy_area_distribution.png")
+
+
+def compare_6_top_agents_evolution(df_new, df_old):
+    """Chart: Agent Market Evolution"""
+    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+
+    # Clean agent names for new data
+    df_new['agent_clean'] = df_new['user_name'].str.replace(r'\s*\(\s*Əmlak Agenti\s*\)', '', regex=True)
+    df_new['agent_clean'] = df_new['agent_clean'].str.replace(r'\s*\(\s*Mülkiyyətçi\s*\)', '', regex=True)
+    df_new['agent_clean'] = df_new['agent_clean'].str.strip()
+
+    # 2023 Top Agents
+    ax1 = axes[0]
+    old_top = df_old['user_name'].value_counts().head(8)
+    colors1 = plt.cm.Blues(np.linspace(0.4, 0.8, len(old_top)))
+    bars1 = ax1.barh(old_top.index[::-1], old_top.values[::-1], color=colors1[::-1], edgecolor='white')
+    ax1.set_xlabel('Number of Listings', fontweight='bold')
+    ax1.set_title('Top Agents 2023', fontsize=14, fontweight='bold')
+    for bar, val in zip(bars1, old_top.values[::-1]):
+        ax1.text(val + 10, bar.get_y() + bar.get_height()/2, f'{val}', va='center', fontsize=10)
+
+    # 2025 Top Agents
+    ax2 = axes[1]
+    new_top = df_new['agent_clean'].value_counts().head(8)
+    colors2 = plt.cm.Greens(np.linspace(0.4, 0.8, len(new_top)))
+    bars2 = ax2.barh(new_top.index[::-1], new_top.values[::-1], color=colors2[::-1], edgecolor='white')
+    ax2.set_xlabel('Number of Listings', fontweight='bold')
+    ax2.set_title('Top Agents 2025', fontsize=14, fontweight='bold')
+    for bar, val in zip(bars2, new_top.values[::-1]):
+        ax2.text(val + 5, bar.get_y() + bar.get_height()/2, f'{val}', va='center', fontsize=10)
+
+    fig.suptitle('Agent Market Leadership: 2023 vs 2025\nMarket Share Evolution', fontsize=16, fontweight='bold', y=1.02)
+
+    plt.tight_layout()
+    plt.savefig(f'{OUTPUT_DIR}/18_yoy_top_agents.png', dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print("Generated: 18_yoy_top_agents.png")
+
+
+def compare_7_key_metrics_summary(df_new, df_old):
+    """Chart: Key Metrics Comparison Dashboard"""
+    fig, axes = plt.subplots(2, 3, figsize=(16, 10))
+    fig.suptitle('Year-over-Year Market Comparison: 2023 vs 2025', fontsize=18, fontweight='bold', y=1.02)
+
+    # 1. Total Listings
+    ax1 = axes[0, 0]
+    old_count = len(df_old)
+    new_count = len(df_new)
+    change = ((new_count - old_count) / old_count) * 100
+    ax1.text(0.5, 0.65, f'{new_count:,}', ha='center', va='center', fontsize=32, fontweight='bold', color=COLORS['primary'])
+    ax1.text(0.5, 0.4, f'vs {old_count:,} in 2023', ha='center', va='center', fontsize=12)
+    ax1.text(0.5, 0.2, f'{change:+.1f}%', ha='center', va='center', fontsize=18,
+             fontweight='bold', color=COLORS['accent'] if change < 0 else COLORS['success'])
+    ax1.set_title('Total Listings', fontweight='bold', fontsize=13)
+    ax1.axis('off')
+
+    # 2. Median Area
+    ax2 = axes[0, 1]
+    old_area = df_old['area_numeric'].median()
+    new_area = df_new['area_numeric'].median()
+    area_change = ((new_area - old_area) / old_area) * 100
+    ax2.text(0.5, 0.65, f'{new_area:.0f} m²', ha='center', va='center', fontsize=32, fontweight='bold', color=COLORS['primary'])
+    ax2.text(0.5, 0.4, f'vs {old_area:.0f} m² in 2023', ha='center', va='center', fontsize=12)
+    ax2.text(0.5, 0.2, f'{area_change:+.1f}%', ha='center', va='center', fontsize=18,
+             fontweight='bold', color=COLORS['accent'] if area_change < 0 else COLORS['success'])
+    ax2.set_title('Median Property Size', fontweight='bold', fontsize=13)
+    ax2.axis('off')
+
+    # 3. Average Views
+    ax3 = axes[0, 2]
+    old_views = df_old['view_count'].mean()
+    new_views = df_new['view_count'].mean()
+    views_change = ((new_views - old_views) / old_views) * 100
+    ax3.text(0.5, 0.65, f'{new_views:.0f}', ha='center', va='center', fontsize=32, fontweight='bold', color=COLORS['primary'])
+    ax3.text(0.5, 0.4, f'vs {old_views:.0f} in 2023', ha='center', va='center', fontsize=12)
+    ax3.text(0.5, 0.2, f'{views_change:+.1f}%', ha='center', va='center', fontsize=18,
+             fontweight='bold', color=COLORS['accent'] if views_change < 0 else COLORS['success'])
+    ax3.set_title('Avg Views per Listing', fontweight='bold', fontsize=13)
+    ax3.axis('off')
+
+    # 4. Title Deed %
+    ax4 = axes[1, 0]
+    old_kupca = (df_old['document_type'] == 'Çıxarış (Kupça)').sum() / len(df_old) * 100
+    new_kupca = (df_new['document_type'] == 'Çıxarış (Kupça)').sum() / len(df_new) * 100
+    kupca_change = new_kupca - old_kupca
+    ax4.text(0.5, 0.65, f'{new_kupca:.1f}%', ha='center', va='center', fontsize=32, fontweight='bold', color=COLORS['success'])
+    ax4.text(0.5, 0.4, f'vs {old_kupca:.1f}% in 2023', ha='center', va='center', fontsize=12)
+    ax4.text(0.5, 0.2, f'{kupca_change:+.1f}pp', ha='center', va='center', fontsize=18,
+             fontweight='bold', color=COLORS['success'] if kupca_change > 0 else COLORS['accent'])
+    ax4.set_title('Properties with Title Deed', fontweight='bold', fontsize=13)
+    ax4.axis('off')
+
+    # 5. Excellent Condition %
+    ax5 = axes[1, 1]
+    old_excellent = (df_old['repair_type'] == 'Əla').sum() / df_old['repair_type'].notna().sum() * 100
+    new_excellent = (df_new['repair_type'] == 'Əla').sum() / df_new['repair_type'].notna().sum() * 100
+    excellent_change = new_excellent - old_excellent
+    ax5.text(0.5, 0.65, f'{new_excellent:.1f}%', ha='center', va='center', fontsize=32, fontweight='bold', color=COLORS['success'])
+    ax5.text(0.5, 0.4, f'vs {old_excellent:.1f}% in 2023', ha='center', va='center', fontsize=12)
+    ax5.text(0.5, 0.2, f'{excellent_change:+.1f}pp', ha='center', va='center', fontsize=18,
+             fontweight='bold', color=COLORS['accent'] if excellent_change < 0 else COLORS['success'])
+    ax5.set_title('Excellent Condition', fontweight='bold', fontsize=13)
+    ax5.axis('off')
+
+    # 6. Unique Agents
+    ax6 = axes[1, 2]
+    old_agents = df_old['user_name'].nunique()
+    new_agents = df_new['user_name'].nunique()
+    agents_change = ((new_agents - old_agents) / old_agents) * 100
+    ax6.text(0.5, 0.65, f'{new_agents:,}', ha='center', va='center', fontsize=32, fontweight='bold', color=COLORS['primary'])
+    ax6.text(0.5, 0.4, f'vs {old_agents:,} in 2023', ha='center', va='center', fontsize=12)
+    ax6.text(0.5, 0.2, f'{agents_change:+.1f}%', ha='center', va='center', fontsize=18,
+             fontweight='bold', color=COLORS['accent'] if agents_change < 0 else COLORS['success'])
+    ax6.set_title('Active Agents', fontweight='bold', fontsize=13)
+    ax6.axis('off')
+
+    plt.tight_layout()
+    plt.savefig(f'{OUTPUT_DIR}/19_yoy_metrics_summary.png', dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print("Generated: 19_yoy_metrics_summary.png")
+
+
+def compare_8_floor_distribution(df_new, df_old):
+    """Chart: Floor Distribution Comparison"""
+    fig, ax = plt.subplots(figsize=(14, 7))
+
+    # Extract floor from format like "9/5" -> 5 (current floor)
+    def extract_current_floor(f):
+        if pd.isna(f):
+            return None
+        match = re.search(r'(\d+)/(\d+)', str(f))
+        if match:
+            return int(match.group(2))
+        return None
+
+    df_new['current_floor'] = df_new['floor'].apply(extract_current_floor)
+    df_old['current_floor'] = df_old['floor'].apply(extract_current_floor)
+
+    # Filter valid floors
+    new_floors = df_new[df_new['current_floor'].notna() & (df_new['current_floor'] >= 1) & (df_new['current_floor'] <= 20)]['current_floor']
+    old_floors = df_old[df_old['current_floor'].notna() & (df_old['current_floor'] >= 1) & (df_old['current_floor'] <= 20)]['current_floor']
+
+    # Create bins
+    bins = [0, 1, 3, 5, 9, 12, 20]
+    labels = ['Ground\n(1)', 'Low\n(2-3)', 'Mid-Low\n(4-5)', 'Mid-High\n(6-9)', 'High\n(10-12)', 'Very High\n(13+)']
+
+    new_binned = pd.cut(new_floors, bins=bins, labels=labels).value_counts().reindex(labels)
+    old_binned = pd.cut(old_floors, bins=bins, labels=labels).value_counts().reindex(labels)
+
+    # Normalize to percentages
+    new_pct = (new_binned / new_binned.sum() * 100)
+    old_pct = (old_binned / old_binned.sum() * 100)
+
+    x = np.arange(len(labels))
+    width = 0.35
+
+    bars1 = ax.bar(x - width/2, old_pct.values, width, label='2023', color=COLORS['secondary'], edgecolor='white')
+    bars2 = ax.bar(x + width/2, new_pct.values, width, label='2025', color=COLORS['primary'], edgecolor='white')
+
+    ax.set_xlabel('Floor Level', fontweight='bold')
+    ax.set_ylabel('Percentage of Market (%)', fontweight='bold')
+    ax.set_title('Floor Distribution Trends: 2023 vs 2025\nVertical Market Evolution',
+                 fontsize=16, fontweight='bold', pad=20)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.legend(fontsize=12)
+
+    plt.tight_layout()
+    plt.savefig(f'{OUTPUT_DIR}/20_yoy_floor_distribution.png', dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print("Generated: 20_yoy_floor_distribution.png")
+
+
 def main():
     print("=" * 60)
     print("Generating Business Analytics Charts")
     print("=" * 60)
 
     df = load_and_prepare_data()
-    print(f"\nLoaded {len(df):,} property records")
+    print(f"\nLoaded {len(df):,} property records (2025)")
     print(f"Generating charts in '{OUTPUT_DIR}/' directory...\n")
 
     generate_summary_dashboard(df)
@@ -651,6 +1039,23 @@ def main():
     chart_10_market_segments(df)
     chart_11_listing_activity(df)
     chart_12_investment_opportunity(df)
+
+    # Load old data and generate comparison charts
+    print("\n" + "-" * 40)
+    print("Generating Year-over-Year Comparison Charts")
+    print("-" * 40 + "\n")
+
+    df_old = load_old_data()
+    print(f"Loaded {len(df_old):,} property records (2023)")
+
+    compare_1_market_size(df, df_old)
+    compare_2_room_distribution(df, df_old)
+    compare_3_document_types(df, df_old)
+    compare_4_repair_types(df, df_old)
+    compare_5_area_distribution(df, df_old)
+    compare_6_top_agents_evolution(df, df_old)
+    compare_7_key_metrics_summary(df, df_old)
+    compare_8_floor_distribution(df, df_old)
 
     print("\n" + "=" * 60)
     print("All charts generated successfully!")
